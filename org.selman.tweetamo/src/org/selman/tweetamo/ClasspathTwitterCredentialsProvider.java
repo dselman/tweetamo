@@ -17,19 +17,14 @@ package org.selman.tweetamo;
 import java.io.IOException;
 import java.io.InputStream;
 
-import com.amazonaws.AmazonClientException;
-
 /**
- * {@link AWSCredentialsProvider} implementation that loads AWS security
+ * {@link TwitterCredentialsProvider} implementation that loads Twitter security
  * credentials from a properties file on the classpath. The default
  * constructor creates a credentials provider that loads the credentials
- * from a file named <code>AwsCredentials.properties</code> on the
+ * from a file named <code>TwitterCredentials.properties</code> on the
  * classpath, but which file to use from the classpath can also be controled
  * through the one-argument constructor.
  * <p>
- * The AWS access key ID is expected to be in the <code>accessKey</code>
- * property and the AWS secret key is expected to be in the
- * <code>secretKey</code> property.
  */
 public class ClasspathTwitterCredentialsProvider implements TwitterCredentialsProvider {
 
@@ -40,8 +35,8 @@ public class ClasspathTwitterCredentialsProvider implements TwitterCredentialsPr
 
     /**
      * Creates a new ClasspathPropertiesFileCredentialsProvider that will
-     * attempt to load the <code>AwsCredentials.properties</code> file from
-     * the classpath to read AWS security credentials.
+     * attempt to load the <code>TwitterCredentials.properties</code> file from
+     * the classpath to read Twitter security credentials.
      */
     public ClasspathTwitterCredentialsProvider() {
         this(DEFAULT_PROPERTIES_FILE);
@@ -86,13 +81,13 @@ public class ClasspathTwitterCredentialsProvider implements TwitterCredentialsPr
 	public TwitterCredentials getTwitterCredentials() {
         InputStream inputStream = getClass().getResourceAsStream(credentialsFilePath);
         if (inputStream == null) {
-            throw new AmazonClientException("Unable to load AWS credentials from the " + credentialsFilePath + " file on the classpath");
+            throw new SecurityException("Unable to load Twitter credentials from the " + credentialsFilePath + " file on the classpath");
         }
 
         try {
             return new PropertiesCredentials(inputStream).getTwitterCredentials();
         } catch (IOException e) {
-            throw new AmazonClientException("Unable to load AWS credentials from the " + credentialsFilePath + " file on the classpath", e);
+            throw new SecurityException("Unable to load Twitter credentials from the " + credentialsFilePath + " file on the classpath", e);
         }
     }
 }

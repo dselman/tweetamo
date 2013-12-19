@@ -124,19 +124,7 @@ public class PersistentStore {
 									.withAttributeType(ScalarAttributeType.N),
 							new AttributeDefinition().withAttributeName(
 									COL_CREATEDAT).withAttributeType(
-									ScalarAttributeType.N),
-							new AttributeDefinition()
-									.withAttributeName(COL_LAT)
-									.withAttributeType(ScalarAttributeType.N),
-							new AttributeDefinition().withAttributeName(
-									COL_LONG).withAttributeType(
-									ScalarAttributeType.N),
-							new AttributeDefinition().withAttributeName(
-									COL_SCREENNAME).withAttributeType(
-									ScalarAttributeType.S),
-							new AttributeDefinition().withAttributeName(
-									COL_TEXT).withAttributeType(
-									ScalarAttributeType.S))
+									ScalarAttributeType.N))
 					.withProvisionedThroughput(
 							new ProvisionedThroughput().withReadCapacityUnits(
 									readCapacity).withWriteCapacityUnits(
@@ -165,6 +153,7 @@ public class PersistentStore {
 			Map<String, AttributeValue> item = newItem(status);
 			PutItemRequest putItemRequest = new PutItemRequest(TABLE_NAME, item);
 			dynamoDB.putItem(putItemRequest);
+			LOG.info("Stored status in Dynamo: " + status.getId() );
 		} catch (Exception e) {
 			handleException(e);
 		}
@@ -218,10 +207,12 @@ public class PersistentStore {
 				new AttributeValue().withN(Long.toString(status.getId())));
 		item.put(COL_CREATEDAT, new AttributeValue().withN(Long.toString(status
 				.getCreatedAt().getTime())));
-		item.put(COL_LAT, new AttributeValue().withN(Double.toString(status
-				.getGeoLocation().getLatitude())));
-		item.put(COL_LONG, new AttributeValue().withN(Double.toString(status
-				.getGeoLocation().getLongitude())));
+		if(status.getGeoLocation()!=null) {
+			item.put(COL_LAT, new AttributeValue().withN(Double.toString(status
+					.getGeoLocation().getLatitude())));
+			item.put(COL_LONG, new AttributeValue().withN(Double.toString(status
+					.getGeoLocation().getLongitude())));			
+		}
 		item.put(COL_SCREENNAME,
 				new AttributeValue().withS(status.getUser().getScreenName()));
 		item.put(COL_TEXT, new AttributeValue().withS(status.getText()));

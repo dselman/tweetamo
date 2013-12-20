@@ -16,12 +16,16 @@
 package org.selman.tweetamo;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import twitter4j.Status;
 
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import com.amazonaws.services.dynamodbv2.model.ScanResult;
 import com.amazonaws.services.kinesis.clientlibrary.exceptions.InvalidStateException;
 import com.amazonaws.services.kinesis.clientlibrary.exceptions.ShutdownException;
 import com.amazonaws.services.kinesis.clientlibrary.exceptions.ThrottlingException;
@@ -80,6 +84,28 @@ public class TweetamoRecordProcessor implements IRecordProcessor {
         if (System.currentTimeMillis() > nextCheckpointTimeInMillis) {
             checkpoint(checkpointer);
             nextCheckpointTimeInMillis = System.currentTimeMillis() + CHECKPOINT_INTERVAL_MILLIS;
+            
+        	// get the last minutes tweets, max of 30
+        	long start = System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(30);
+        	
+        	try {
+        		if(persistentStore !=null) {
+                	ScanResult scanResult = persistentStore.getSince(start, 30);
+                	
+                	if(scanResult!=null) {
+                		System.out.println( "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" );
+                		System.out.println( "Last 30 mins of Tweets, max of 30" );
+                		System.out.println( "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" );
+                		for (Map<String, AttributeValue> item : scanResult.getItems()) {
+                            printItem(item);
+                        }    
+                		System.out.println( "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" );
+                	}        			
+        		}
+        	}
+        	catch(Exception e) {
+        		LOG.error("Error retrieving tweets.",e);
+        	}
         }
         
     }
@@ -94,11 +120,8 @@ public class TweetamoRecordProcessor implements IRecordProcessor {
                 try {
                 	Status status = TweetSerializer.fromBytes(record.getData());
                 	
-                    LOG.info("Deserialized status on partition " + record.getPartitionKey() + " from " + status.getUser().getScreenName() );
-                    LOG.info("Text: " + status.getText() );
-                    
                     if(persistentStore!=null) {
-                    	persistentStore.add(status);
+                    	persistentStore.add(status);                    	
                     }
                     
                     processedSuccessfully = true;
@@ -118,6 +141,20 @@ public class TweetamoRecordProcessor implements IRecordProcessor {
             if (!processedSuccessfully) {
                 LOG.error("Couldn't process record " + record + ". Skipping the record.");
             }
+        }
+    }
+    
+    private static void printItem(Map<String, AttributeValue> attributeList) {
+        for (Map.Entry<String, AttributeValue> item : attributeList.entrySet()) {
+            String attributeName = item.getKey();
+            AttributeValue value = item.getValue();
+            System.out.println(attributeName + " "
+                    + (value.getS() == null ? "" : "S=[" + value.getS() + "]")
+                    + (value.getN() == null ? "" : "N=[" + value.getN() + "]")
+                    + (value.getB() == null ? "" : "B=[" + value.getB() + "]")
+                    + (value.getSS() == null ? "" : "SS=[" + value.getSS() + "]")
+                    + (value.getNS() == null ? "" : "NS=[" + value.getNS() + "]")
+                    + (value.getBS() == null ? "" : "BS=[" + value.getBS() + "] \n"));
         }
     }
 

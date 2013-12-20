@@ -125,9 +125,7 @@ public final class TweetamoServer {
         }
         
         LOG.info("Using credentials with access key id: " + credentialsProvider.getCredentials().getAWSAccessKeyId());
-        
-        kinesisClientLibConfiguration = new KinesisClientLibConfiguration(applicationName, streamName, kinesisEndpoint, 
-        		initialPositionInStream, credentialsProvider, workerId); 
+        kinesisClientLibConfiguration = new KinesisClientLibConfiguration(applicationName, streamName, credentialsProvider, workerId ); 
     }
 
     /**

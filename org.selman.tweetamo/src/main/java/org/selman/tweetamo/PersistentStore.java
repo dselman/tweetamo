@@ -14,7 +14,7 @@ package org.selman.tweetamo;
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
  */
-import java.util.Date;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -35,13 +35,18 @@ import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
 import com.amazonaws.services.dynamodbv2.model.Condition;
 import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
 import com.amazonaws.services.dynamodbv2.model.DescribeTableRequest;
+import com.amazonaws.services.dynamodbv2.model.GlobalSecondaryIndex;
 import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
 import com.amazonaws.services.dynamodbv2.model.KeyType;
+import com.amazonaws.services.dynamodbv2.model.Projection;
 import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughput;
 import com.amazonaws.services.dynamodbv2.model.PutItemRequest;
+import com.amazonaws.services.dynamodbv2.model.QueryRequest;
+import com.amazonaws.services.dynamodbv2.model.QueryResult;
 import com.amazonaws.services.dynamodbv2.model.ScalarAttributeType;
 import com.amazonaws.services.dynamodbv2.model.ScanRequest;
 import com.amazonaws.services.dynamodbv2.model.ScanResult;
+import com.amazonaws.services.dynamodbv2.model.Select;
 import com.amazonaws.services.dynamodbv2.model.TableDescription;
 import com.amazonaws.services.dynamodbv2.model.TableStatus;
 
@@ -60,7 +65,9 @@ public class PersistentStore {
 	public static final String COL_LONG = "long";
 	public static final String COL_SCREENNAME = "screenName";
 	public static final String COL_TEXT = "text";
-	
+
+	public static final String INDEX_SCREENNAME = "INDEX_screenName";
+
 	private static PersistentStore INSTANCE = null;
 
 	/**
@@ -93,42 +100,69 @@ public class PersistentStore {
 			handleException(e);
 		}
 	}
-	
+
 	public static PersistentStore getInstance() {
-    	synchronized(PersistentStore.class) {
-        	if(INSTANCE==null) {
-        		try {
-        			INSTANCE = new PersistentStore( Region.getRegion(Regions.US_EAST_1), 1L, 1000L);
+		synchronized (PersistentStore.class) {
+			if (INSTANCE == null) {
+				try {
+					INSTANCE = new PersistentStore(
+							Region.getRegion(Regions.US_EAST_1), 1L, 50L);
 				} catch (Exception e) {
-					LOG.error("Failed to create PersistentStore",e);
+					LOG.error("Failed to create PersistentStore", e);
 				}
-        	}
-        	
-    		return INSTANCE;
-    	}
+			}
+
+			return INSTANCE;
+		}
 	}
 
-	private void createTables(long readCapacity, long writeCapacity) throws Exception {
+	private void createTables(long readCapacity, long writeCapacity)
+			throws Exception {
 		// ID | createdAt | lat | long | screen name | text |
+		// Primary index is by ID
+		// Global Secondary index is by screen name + createdAt
 
 		try {
 			CreateTableRequest createTableRequest = new CreateTableRequest()
 					.withTableName(TABLE_NAME)
 					.withKeySchema(
 							new KeySchemaElement().withAttributeName(COL_ID)
-									.withKeyType(KeyType.HASH),
-							new KeySchemaElement().withAttributeName(
-									COL_CREATEDAT).withKeyType(KeyType.RANGE))
+									.withKeyType(KeyType.HASH))
 					.withAttributeDefinitions(
 							new AttributeDefinition().withAttributeName(COL_ID)
 									.withAttributeType(ScalarAttributeType.N),
 							new AttributeDefinition().withAttributeName(
 									COL_CREATEDAT).withAttributeType(
-									ScalarAttributeType.N))
+									ScalarAttributeType.N),
+							new AttributeDefinition().withAttributeName(
+									COL_SCREENNAME).withAttributeType(
+									ScalarAttributeType.S))
 					.withProvisionedThroughput(
 							new ProvisionedThroughput().withReadCapacityUnits(
 									readCapacity).withWriteCapacityUnits(
-									writeCapacity));
+									writeCapacity))
+					.withGlobalSecondaryIndexes(
+							new GlobalSecondaryIndex()
+									.withIndexName(INDEX_SCREENNAME)
+									.withProvisionedThroughput(
+											new ProvisionedThroughput()
+													.withReadCapacityUnits(
+															(long) 10)
+													.withWriteCapacityUnits(
+															(long) 1))
+									.withProjection(
+											new Projection()
+													.withProjectionType("ALL"))
+									.withKeySchema(
+											new KeySchemaElement()
+													.withAttributeName(
+															COL_SCREENNAME)
+													.withKeyType(KeyType.HASH),
+											new KeySchemaElement()
+													.withAttributeName(
+															COL_CREATEDAT)
+													.withKeyType(KeyType.RANGE)));
+
 			TableDescription createdTableDescription = dynamoDB.createTable(
 					createTableRequest).getTableDescription();
 			LOG.info("Created Table: " + createdTableDescription);
@@ -153,21 +187,67 @@ public class PersistentStore {
 			Map<String, AttributeValue> item = newItem(status);
 			PutItemRequest putItemRequest = new PutItemRequest(TABLE_NAME, item);
 			dynamoDB.putItem(putItemRequest);
-			LOG.info("Stored status in Dynamo: " + status.getId() );
+			LOG.info("Stored status in Dynamo: " + status.getId());
 		} catch (Exception e) {
 			handleException(e);
 		}
 	}
 
-	public ScanResult getNewerThan(Date date) throws Exception {
+	public QueryResult getLatestTweetsForScreenName(String screenName,
+			long timestamp) throws Exception {
 		try {
-			HashMap<String, Condition> scanFilter = new HashMap<String, Condition>();
-			Condition condition = new Condition().withComparisonOperator(
-					ComparisonOperator.GT.toString()).withAttributeValueList(
-					new AttributeValue().withN(Long.toString(date.getTime())));
-			scanFilter.put(COL_CREATEDAT, condition);
-			ScanRequest scanRequest = new ScanRequest(TABLE_NAME)
-					.withScanFilter(scanFilter);
+			long startDateMilli = System.currentTimeMillis();
+
+			Map<String, Condition> keyConditions = new HashMap<String, Condition>();
+
+			keyConditions.put(
+					COL_SCREENNAME,
+					new Condition().withComparisonOperator(
+							ComparisonOperator.EQ).withAttributeValueList(
+							new AttributeValue().withS(screenName)));
+
+			keyConditions.put(
+					COL_CREATEDAT,
+					new Condition().withComparisonOperator(
+							ComparisonOperator.BETWEEN)
+							.withAttributeValueList(
+									new AttributeValue().withN(Long
+											.toString(timestamp)),
+									new AttributeValue().withN(Long
+											.toString(startDateMilli))));
+
+			QueryRequest queryRequest = new QueryRequest()
+					.withTableName(TABLE_NAME).withIndexName(INDEX_SCREENNAME)
+					.withKeyConditions(keyConditions)
+					.withSelect(Select.ALL_ATTRIBUTES)
+					.withScanIndexForward(true);
+
+			QueryResult result = dynamoDB.query(queryRequest);
+			return result;
+		} catch (Exception e) {
+			handleException(e);
+		}
+
+		return null;
+	}
+
+	public ScanResult getSince(long timestamp, int limit) throws Exception {
+		try {
+			Condition scanFilterCondition = new Condition()
+					.withComparisonOperator(ComparisonOperator.GT.toString())
+					.withAttributeValueList(
+							new AttributeValue().withN(Long.toString(timestamp)));
+			Map<String, Condition> conditions = new HashMap<String, Condition>();
+			conditions.put(COL_CREATEDAT, scanFilterCondition);
+
+			ScanRequest scanRequest = new ScanRequest()
+					.withTableName(TABLE_NAME)
+					.withScanFilter(conditions)
+					.withLimit(limit)
+					.withAttributesToGet(
+							Arrays.asList(COL_ID, COL_CREATEDAT, COL_LAT,
+									COL_LONG, COL_SCREENNAME, COL_TEXT));
+
 			return dynamoDB.scan(scanRequest);
 		} catch (Exception e) {
 			handleException(e);
@@ -196,8 +276,8 @@ public class PersistentStore {
 							+ "such as not being able to access the network.",
 					e);
 			LOG.error("Error Message: " + ace.getMessage());
-		} 
-		
+		}
+
 		throw e;
 	}
 
@@ -207,11 +287,11 @@ public class PersistentStore {
 				new AttributeValue().withN(Long.toString(status.getId())));
 		item.put(COL_CREATEDAT, new AttributeValue().withN(Long.toString(status
 				.getCreatedAt().getTime())));
-		if(status.getGeoLocation()!=null) {
+		if (status.getGeoLocation() != null) {
 			item.put(COL_LAT, new AttributeValue().withN(Double.toString(status
 					.getGeoLocation().getLatitude())));
-			item.put(COL_LONG, new AttributeValue().withN(Double.toString(status
-					.getGeoLocation().getLongitude())));			
+			item.put(COL_LONG, new AttributeValue().withN(Double
+					.toString(status.getGeoLocation().getLongitude())));
 		}
 		item.put(COL_SCREENNAME,
 				new AttributeValue().withS(status.getUser().getScreenName()));

@@ -1,3 +1,4 @@
+target/
 bin/
 AwsCredentials.properties
 TwitterCredentials.properties

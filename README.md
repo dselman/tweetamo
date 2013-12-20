@@ -1,7 +1,7 @@
 tweetamo
 ========
 
-An experimental integration between AWS Kinesis and Twitter. The code is still very much evolving and I have not yet Mavenized this Eclipse project, nor committed the required JARs.
+An experimental integration between AWS Kinesis, Dynamo and Twitter. The "client" code subscribes to tweets using Twitter's streaming API and pushes them to a Kinesis stream. The "server" code subscribes to the stream and writes the Twitter status updates to a Dynamo table for offline query and analysis (TBD). The code is still very much evolving and I have not yet Mavenized this Eclipse project, nor committed the required JARs.
 
 To run this code you will need to create 2 authentication files: one for AWS and one for Twitter. Both files need to be in the classpath.
 

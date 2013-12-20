@@ -30,3 +30,10 @@ Launch the Tweetamo client Java application. The first argument is the language 
 Once launched the client will connect to the tweetamo Kinesis steam and publish the tweets that match your search string to the stream.
 
 Launch the org.selman.tweetamo.TweetamoServer Java application. This application connects to your tweetamo stream and simply logs the tweets to the console.
+
+Building
+--------
+
+Download the code, open a shell at the org.selman.tweetamo directory and type:
+
+    mvn clean install

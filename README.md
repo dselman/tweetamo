@@ -37,3 +37,5 @@ Building
 Download the code, open a shell at the org.selman.tweetamo directory and type:
 
     mvn clean install
+    
+You may need to first build https://github.com/awslabs/amazon-kinesis-client locally, depending on what has been published to Maven central.
